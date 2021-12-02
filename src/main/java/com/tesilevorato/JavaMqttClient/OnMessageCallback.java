@@ -3,6 +3,7 @@ package com.tesilevorato.JavaMqttClient;
 import org.eclipse.paho.client.mqttv3.IMqttDeliveryToken;
 import org.eclipse.paho.client.mqttv3.MqttCallback;
 import org.eclipse.paho.client.mqttv3.MqttMessage;
+//import org.json.JSONObject;
 
 public class OnMessageCallback implements MqttCallback {
     Connettore connettore= new Connettore();
@@ -13,9 +14,10 @@ public class OnMessageCallback implements MqttCallback {
 
     public void messageArrived(String topic, MqttMessage message) throws Exception {
         // The messages obtained after subscribe will be executed here
-        System.out.println("Received message topic:" + topic);
-        System.out.println("Received message Qos:" + message.getQos());
-        System.out.println("Received message content:" + new String(message.getPayload()));
+        //System.out.println("Received message topic:" + topic);
+        //System.out.println("Received message Qos:" + message.getQos());
+        //System.out.println("Received message content:" + new String(message.getPayload()));
+        connettore.translate(new String(message.getPayload()));
     }
 
     public void deliveryComplete(IMqttDeliveryToken token) {
