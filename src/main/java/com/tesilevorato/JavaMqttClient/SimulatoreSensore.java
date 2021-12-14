@@ -37,8 +37,8 @@ public class SimulatoreSensore extends Thread {
                     message.setQos(qos);
                     sampleClient.publish(topic, message);
                     System.out.println("Message published");
-                    id++;
-                    } catch (InterruptedException e) {
+                    
+                    } catch (InterruptedException | JSONException e) {
                     e.printStackTrace();
                 }
             }  
