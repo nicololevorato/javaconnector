@@ -3,32 +3,32 @@ package com.tesilevorato.JavaMqttClient;
 
 import java.net.MalformedURLException;
 import java.net.URL;
+import java.nio.charset.Charset;
 import java.sql.Connection;
 import java.sql.DriverManager;
 import java.sql.PreparedStatement;
 import java.sql.ResultSet;
 import java.sql.SQLException;
 import java.util.ArrayList;
-import java.util.Arrays;
+
 import java.util.List;
 
 import com.google.gson.Gson;
-import com.google.gson.JsonArray;
 
-import org.json.JSONArray;
+
+
 import org.json.JSONException;
 import org.json.JSONObject;
-import org.ugeojson.builder.feature.FeatureBuilder;
-import org.ugeojson.model.PositionDto;
+
+
 import org.ugeojson.model.feature.FeatureDto;
-import org.ugeojson.model.geometry.LineStringDto;
+
 import org.ugeojson.model.geometry.PointDto;
 
 import de.fraunhofer.iosb.ilt.sta.ServiceFailureException;
 import de.fraunhofer.iosb.ilt.sta.model.Location;
 import de.fraunhofer.iosb.ilt.sta.model.Observation;
 import de.fraunhofer.iosb.ilt.sta.model.Thing;
-import de.fraunhofer.iosb.ilt.sta.model.builder.ThingBuilder;
 import de.fraunhofer.iosb.ilt.sta.service.SensorThingsService;
 
 
@@ -84,37 +84,55 @@ public class Connettore {
         // }
         }
     
-    public void translate(String payload) throws JSONException{
+    public void translate(String payload) throws JSONException, ServiceFailureException, SQLException{
         this.payload= new JSONObject(payload);
-        this.id=this.payload.getInt("id");
-        
-        String sql = "SELECT ids, brand FROM sensor WHERE id=" + this.id;
-        
-        try ( PreparedStatement pstmt  = conn.prepareStatement(sql)){      
-             //pstmt.setDouble(1,id);      
-            ResultSet rs  = pstmt.executeQuery();         
-            marca =rs.getString("brand");
-            thingId=rs.getInt("ids");
-        } catch (SQLException e) {
-        System.out.println(e.getMessage());
-    }
+        this.id=this.payload.getInt("id");       
+        String sql = "SELECT ids, brand FROM sensor WHERE id=" + this.id;        
+        PreparedStatement pstmt  = conn.prepareStatement(sql);    
+        //pstmt.setDouble(1,id);      
+        ResultSet rs  = pstmt.executeQuery();         
+        marca =rs.getString("brand");
+        thingId=rs.getInt("ids");
         this.content=this.payload.getString("payload");
          
         switch (marca) {
             case "Datasense":
-                try {
-                    datasense(this.content,thingId);
-                } catch (ServiceFailureException e) {
-                    System.out.println("Errore post frost");
-                    
-                    //e.printStackTrace();
-                }
+                    datasense(this.content,thingId);          
                 break;
-        
+            case "Libellium":
+                libellium(this.content);        
+            break;
             default:
                 break;
         }
     }
+    private void libellium(String payload) throws SQLException {
+        // String sql = "SELECT * FROM libelliumOBS WHERE id=" + thingId;        
+        // PreparedStatement pstmt  = conn.prepareStatement(sql);         
+        // ResultSet rs  = pstmt.executeQuery();
+        //nell'header in posizione del terzo byte è presente l'informazione sulla tipologia di frame
+        Charset charset = Charset.forName("ASCII");
+        byte[] byteArrray = payload.getBytes(charset);
+        if(byteArrray.length>2){
+            int temp=(int)byteArrray[3] & 128;
+            if(temp==128){
+                libelliumASCII(payload);
+            }
+            else{
+                libelliumBINARY(payload);
+            }
+        }
+
+
+
+    }
+
+    private void libelliumBINARY(String payload2) {
+    }
+
+    private void libelliumASCII(String payload2) {
+    }
+
     public void print(){
         System.out.println("Ricevuto payload con marca :"+marca);
     }
@@ -177,7 +195,10 @@ public class Connettore {
                     index+=nData*4;
                 }
                 else if(dataType==4){
-                    
+                    nData=(int)Math.ceil(nData*1.5);
+                    dataPayload=payload.substring(index, index + nData);
+                    int i = Integer.parseInt(dataPayload, 16);
+                    dataPayload = Integer.toBinaryString(i);                    
                 }
                 convertDataDatasense(dataType,dataPayload,obsNumber);
                 break;
@@ -215,7 +236,10 @@ public class Connettore {
             } 
             break;
             case 4:
-                
+            for (String valueS: dataPayload.split("(?<=\\G.{12})")) {
+                Double value = Integer.parseInt(valueS,2)*0.05-20;
+                observations.add(value);
+            }
             break;
         
             default:
