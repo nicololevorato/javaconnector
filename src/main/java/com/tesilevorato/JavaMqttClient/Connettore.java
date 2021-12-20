@@ -10,7 +10,7 @@ import java.sql.PreparedStatement;
 import java.sql.ResultSet;
 import java.sql.SQLException;
 import java.util.ArrayList;
-
+import java.util.Arrays;
 import java.util.List;
 
 import com.google.gson.Gson;
@@ -26,6 +26,7 @@ import org.ugeojson.model.feature.FeatureDto;
 import org.ugeojson.model.geometry.PointDto;
 
 import de.fraunhofer.iosb.ilt.sta.ServiceFailureException;
+import de.fraunhofer.iosb.ilt.sta.model.Datastream;
 import de.fraunhofer.iosb.ilt.sta.model.Location;
 import de.fraunhofer.iosb.ilt.sta.model.Observation;
 import de.fraunhofer.iosb.ilt.sta.model.Thing;
@@ -106,7 +107,7 @@ public class Connettore {
                 break;
         }
     }
-    private void libellium(String payload) throws SQLException {
+    private void libellium(String payload) throws SQLException, ServiceFailureException {
         // String sql = "SELECT * FROM libelliumOBS WHERE id=" + thingId;        
         // PreparedStatement pstmt  = conn.prepareStatement(sql);         
         // ResultSet rs  = pstmt.executeQuery();
@@ -127,11 +128,87 @@ public class Connettore {
 
     }
 
-    private void libelliumBINARY(String payload2) {
+    private void libelliumBINARY(String payload) {
+        
+    }
+    //#region parser dataframe ASCII libellium
+    private void libelliumASCII(String payload) throws SQLException, ServiceFailureException {
+        String[] temp_fields=payload.split("#");
+        int serial_id=Integer.parseInt(temp_fields[1]);
+        String sql_thing = "SELECT THINGID from libelliumID2THING WHERE SERIALID="+serial_id;
+        PreparedStatement pstmt_thing  = conn.prepareStatement(sql_thing);         
+        ResultSet rs_thing  = pstmt_thing.executeQuery();
+        int thingID=rs_thing.getInt("THINGID");
+        Thing temp_thing=service.things().find(thingID);
+        String[] fields = Arrays.copyOfRange(temp_fields, 4, temp_fields.length-1);
+        for(String field :fields){
+            String[] splitted_field=field.split(":");
+            if(splitted_field[0].toUpperCase()=="GPS"){
+                String[] temp=splitted_field[1].split(";");
+                Double lat =Double.parseDouble(temp[0]);
+                Double lon =Double.parseDouble(temp[1]);
+                CreateLocation(temp_thing,lat,lon);
+            }
+            else{
+            String sql_um = "SELECT sensor tag FROM libelliumUM WHERE ASCII=" + splitted_field[0].toUpperCase();        
+            PreparedStatement pstmt_um  = conn.prepareStatement(sql_um);         
+            ResultSet rs_um  = pstmt_um.executeQuery();
+            String sensor_tag=rs_um.getString("sensor tag");
+            String sql_obs = "SELECT "+ sensor_tag.toUpperCase()+" FROM libelliumOBS WHERE THINGID=" + thingID;        
+            PreparedStatement pstmt_obs  = conn.prepareStatement(sql_obs);
+            ResultSet rs_obs=pstmt_obs.executeQuery();
+            int obs_num=rs_obs.getInt(sensor_tag.toUpperCase());
+            Datastream temp_datastream=temp_thing.datastreams().find(obs_num);
+            String data_type=temp_datastream.getObservationType();
+            Observation temp_observation=new Observation(); 
+            temp_observation.setDatastream(temp_datastream);
+            switch (data_type.toUpperCase()) {
+                case "OM_CATEGORYOBSERVATION":
+                    temp_observation.setResult(splitted_field[1]);
+                    break;
+                case "OM_COUNTOBSERVATION":
+                    temp_observation.setResult(Integer.parseInt(splitted_field[1]));
+                    break;
+                case "OM_MEASUREMENT":
+                    temp_observation.setResult(Double.parseDouble(splitted_field[1]));
+                    break;
+                case "OM_OBSERVATION":
+                    temp_observation.setResult(splitted_field[1]);
+                    break;
+                case "OM_TRUTHOBSERVATION":
+                    temp_observation.setResult(Boolean.parseBoolean(splitted_field[1]));
+                    break;
+                default:
+                    break;
+            }       
+            service.create(temp_observation);
+        }
+    }
+        
+        
+    }
+    //#endregion
+
+    private void CreateLocation(Thing temp_thing, Double lat, Double lon) throws ServiceFailureException {
+                FeatureDto feature = new FeatureDto();
+                PointDto point = new PointDto(lat,lon);
+                feature.setGeometry(point);		
+                //feature.setProperties("{}");
+                String featureGeo = "{'type':'Feature','geometry':{'type': 'Point','coordinates': ["+lat+","+lon+"]}}";//FeatureBuilder.getInstance().toGeoJSON(feature);//"{\"type\":\"Feature\",\"geometry\":{\"type\": \"Point\",\"coordinates\": [-114.06,51.05]}}"
+                Location loc=new Location();              
+                Gson gson = new Gson();
+	            Object object = gson.fromJson(featureGeo, Object.class);
+                loc.setLocation(object);
+                loc.setEncodingType("application/vnd.geo+json");
+                loc.setName(temp_thing.getName()+" position");
+                loc.setDescription("Current position of "+temp_thing.getName());
+                
+                //List<Thing> thingsList=new ArrayList<>();
+                //thingsList.add(thing);
+                //loc.setThings(thingsList);
+                service.create(loc);
     }
 
-    private void libelliumASCII(String payload2) {
-    }
 
     public void print(){
         System.out.println("Ricevuto payload con marca :"+marca);
@@ -154,24 +231,8 @@ public class Connettore {
                 index += 3;
                 lat=-114.06;
                 lon=51.05;
-                FeatureDto feature = new FeatureDto();
-                PointDto point = new PointDto(lat,lon);
-                feature.setGeometry(point);		
-                //feature.setProperties("{}");
-                String featureGeo = "{'type':'Feature','geometry':{'type': 'Point','coordinates': ["+lat+","+lon+"]}}";//FeatureBuilder.getInstance().toGeoJSON(feature);//"{\"type\":\"Feature\",\"geometry\":{\"type\": \"Point\",\"coordinates\": [-114.06,51.05]}}"
-                Location loc=new Location();
                 Thing thing = service.things().find(thingId);
-                Gson gson = new Gson();
-	            Object object = gson.fromJson(featureGeo, Object.class);
-                loc.setLocation(object);
-                loc.setEncodingType("application/vnd.geo+json");
-                loc.setName(thing.getName()+" position");
-                loc.setDescription("Current position of "+thing.getName());
-                
-                //List<Thing> thingsList=new ArrayList<>();
-                //thingsList.add(thing);
-                //loc.setThings(thingsList);
-                service.create(loc);
+                CreateLocation(thing, lat, lon);
                 break;
                 case 128:
                 int obsNumber=1;
