@@ -6,7 +6,7 @@ import org.eclipse.paho.client.mqttv3.MqttMessage;
 //import org.json.JSONObject;
 
 public class OnMessageCallback implements MqttCallback {
-    Connettore connettore= new Connettore();
+    ConnettoreDatasense connettore= new ConnettoreDatasense();
     public void connectionLost(Throwable cause) {
         // After the connection is lost, it usually reconnects here
         System.out.println("disconnect，you can reconnect");
@@ -17,7 +17,10 @@ public class OnMessageCallback implements MqttCallback {
         //System.out.println("Received message topic:" + topic);
         //System.out.println("Received message Qos:" + message.getQos());
         //System.out.println("Received message content:" + new String(message.getPayload()));
+        //connettore.translate(new String(message.getPayload()));
+        System.out.println(new String(message.getPayload()));
         connettore.translate(new String(message.getPayload()));
+       
     }
 
     public void deliveryComplete(IMqttDeliveryToken token) {

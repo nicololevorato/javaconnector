@@ -1,0 +1,719 @@
+function decode() {
+  let stream = document.getElementById("encoded").value.trim();
+
+  let byte_stream = [];
+
+  if (isHex(stream)) {
+    byte_stream = getHex(stream);
+  } else {
+    document.getElementById("decoded").innerHTML = "Invalid stream";
+  }
+
+  let decoded_object = parseSensorLoRaWAN(byte_stream);
+
+  if (decoded_object == null || decoded_object.includes(null)) {
+    document.getElementById("decoded").innerHTML = "Invalid stream";
+  } else {
+    document.getElementById("decoded").innerHTML = JSON.stringify(
+      decoded_object,
+      null,
+      2
+    ).slice(1, -1);
+  }
+}
+
+function isHex(value) {
+  if (value.length == 0) return false;
+
+  if (value.startsWith("0x") || value.startsWith("0X")) {
+    value = value.substring(2);
+  }
+
+  let reg_exp = /^[0-9a-fA-F]+$/;
+
+  if (reg_exp.test(value) && value.length % 2 == 0) {
+    return true;
+  } else {
+    return false;
+  }
+}
+
+function getHex(value) {
+  if (value.startsWith("0x") || value.startsWith("0X")) {
+    value = value.substring(2);
+  }
+
+  let num_bytes = value.length / 2;
+  let bytes = [];
+
+  for (let i = 0; i < num_bytes; i++) {
+    bytes.push(parseInt(value.substring(i * 2, i * 2 + 2), 16));
+  }
+
+  return bytes;
+}
+
+function parseSensorLoRaWAN(buffer) {
+  if (buffer == null) {
+    return null;
+  }
+
+  let data_fields = [];
+
+  let payload_length = buffer.length;
+  let iterated_message_length = 0;
+
+  let initial_port_id = document.getElementById("port").value.trim();
+
+  let data_field = parseDataField(
+    buffer,
+    iterated_message_length,
+    parseInt(initial_port_id)
+  );
+  data_fields.push(data_field[0]);
+  iterated_message_length += data_field[1];
+
+  while (iterated_message_length < payload_length) {
+    data_field = parseDataField(buffer, iterated_message_length, null);
+
+    if (data_field == null) {
+      data_fields.push(null);
+      iterated_message_length += 1;
+    } else {
+      data_fields.push(data_field[0]);
+      iterated_message_length += data_field[1] + 1;
+    }
+  }
+
+  return data_fields;
+}
+
+function parseDataField(buffer, index, port_id) {
+  let id = buffer[index];
+  let index_shift = 1;
+
+  if (port_id != null) {
+    id = port_id;
+    index_shift = 0;
+  }
+
+  switch (id) {
+    case 0:
+      return [
+        {
+          ID: id,
+          MessageType: "Reserved",
+        },
+        0,
+      ];
+
+    case 1:
+      return [
+        {
+          ID: id,
+          MessageType: "System Firmware Version",
+          Value: parseVersionUplink(buffer, index + index_shift),
+        },
+        4,
+      ];
+
+    case 2:
+      return [
+        {
+          ID: id,
+          MessageType: "Debug Statistics",
+          Value: null,
+        },
+        0,
+      ];
+
+    case 3:
+      return [
+        {
+          ID: id,
+          MessageType: "Acknowledgment Uplink",
+          Value: parseAcknowledgementUplink(buffer, index + index_shift),
+        },
+        4,
+      ];
+
+    case 10:
+      return [
+        {
+          ID: id,
+          MessageType: "GPS Position",
+          Value: parseGPSData(buffer, index + index_shift),
+        },
+        6,
+      ];
+
+    case 20:
+      return [
+        {
+          ID: id,
+          MessageType: "Battery Voltage",
+          Value: parseBatteryVoltage(buffer, index + index_shift),
+        },
+        2,
+      ];
+
+    case 21:
+      return [
+        {
+          ID: id,
+          MessageType: "Analog In 1",
+          Value: parseAnalogIn(buffer, index + index_shift),
+        },
+        2,
+      ];
+
+    case 22:
+      return [
+        {
+          ID: id,
+          MessageType: "Analog In 2",
+          Value: parseAnalogIn(buffer, index + index_shift),
+        },
+        2,
+      ];
+
+    case 23:
+      return [
+        {
+          ID: id,
+          MessageType: "Analog In 3",
+          Value: parseAnalogIn(buffer, index + index_shift),
+        },
+        2,
+      ];
+
+    case 30:
+      return [
+        {
+          ID: id,
+          MessageType: "Digital IO State",
+          Value: parseDigitalIOState(buffer, index + index_shift),
+        },
+        1,
+      ];
+
+    case 31:
+      return [
+        {
+          ID: id,
+          MessageType: "Input 1 Pulse Count",
+          Value: parseInputPulseCount(buffer, index + index_shift),
+        },
+        2,
+      ];
+
+    case 32:
+      return [
+        {
+          ID: id,
+          MessageType: "Input 2 Pulse Count",
+          Value: parseInputPulseCount(buffer, index + index_shift),
+        },
+        2,
+      ];
+
+    case 33:
+      return [
+        {
+          ID: id,
+          MessageType: "Input 3 Pulse Count",
+          Value: parseInputPulseCount(buffer, index + index_shift),
+        },
+        2,
+      ];
+
+    case 39:
+      return [
+        {
+          ID: id,
+          MessageType: "Digital Input Alert",
+          Value: parseDigitalInputAlert(buffer, index + index_shift),
+        },
+        6,
+      ];
+
+    case 40:
+      return [
+        {
+          ID: id,
+          MessageType: "Internal Temperature",
+          Value: parseInternalTemperature(buffer, index + index_shift),
+        },
+        2,
+      ];
+
+    case 41:
+      return [
+        {
+          ID: id,
+          MessageType: "Digital Matter I2C Temp Probe 1 (Red)",
+          Value: parseI2CTempProbe(buffer, index + index_shift),
+        },
+        2,
+      ];
+
+    case 42:
+      return [
+        {
+          ID: id,
+          MessageType: "Digital Matter I2C Temp Probe 2 (Blue)",
+          Value: parseI2CTempProbe(buffer, index + index_shift),
+        },
+        2,
+      ];
+
+    case 43:
+      return [
+        {
+          ID: id,
+          MessageType: "Digital Matter I2C Temp & Relative Humidity",
+          Value: parseI2CTempRelativeHumidity(buffer, index + index_shift),
+        },
+        3,
+      ];
+
+    case 50:
+      return [
+        {
+          ID: id,
+          MessageType: "Battery Energy Used Since Power Up",
+          Value: parseBatteryEnergySincePower(buffer, index + index_shift),
+        },
+        2,
+      ];
+
+    case 51:
+      return [
+        {
+          ID: id,
+          MessageType: "Estimated Battery % Remaining",
+          Value: parseEstimatedBatteryRemaining(buffer, index + index_shift),
+        },
+        1,
+      ];
+
+    case 128:
+      return [
+        {
+          ID: id,
+          MessageType: "SDI-12 Measurement 1",
+          Value: parseSDIMeasurement(id, buffer, index + index_shift, port_id),
+        },
+        getSDISize(buffer, index + index_shift, port_id),
+      ];
+
+    case 129:
+      return [
+        {
+          ID: id,
+          MessageType: "SDI-12 Measurement 1 - Part 2",
+          Value: parseSDIMeasurement(id, buffer, index + index_shift, port_id),
+        },
+        getSDISize(buffer, index + index_shift, port_id),
+      ];
+
+    case 130:
+      return [
+        {
+          ID: id,
+          MessageType: "SDI-12 Measurement 2",
+          Value: parseSDIMeasurement(id, buffer, index + index_shift, port_id),
+        },
+        getSDISize(buffer, index + index_shift, port_id),
+      ];
+
+    case 131:
+      return [
+        {
+          ID: id,
+          MessageType: "SDI-12 Measurement 2 - Part 2",
+          Value: parseSDIMeasurement(id, buffer, index + index_shift, port_id),
+        },
+        getSDISize(buffer, index + index_shift, port_id),
+      ];
+
+    case 132:
+      return [
+        {
+          ID: id,
+          MessageType: "SDI-12 Measurement 3",
+          Value: parseSDIMeasurement(id, buffer, index + index_shift, port_id),
+        },
+        getSDISize(buffer, index + index_shift, port_id),
+      ];
+
+    case 133:
+      return [
+        {
+          ID: id,
+          MessageType: "SDI-12 Measurement 3 - Part 2",
+          Value: parseSDIMeasurement(id, buffer, index + index_shift, port_id),
+        },
+        getSDISize(buffer, index + index_shift, port_id),
+      ];
+
+    case 134:
+      return [
+        {
+          ID: id,
+          MessageType: "SDI-12 Measurement 4",
+          Value: parseSDIMeasurement(id, buffer, index + index_shift, port_id),
+        },
+        getSDISize(buffer, index + index_shift, port_id),
+      ];
+
+    case 135:
+      return [
+        {
+          ID: id,
+          MessageType: "SDI-12 Measurement 4 - Part 2",
+          Value: parseSDIMeasurement(id, buffer, index + index_shift, port_id),
+        },
+        getSDISize(buffer, index + index_shift, port_id),
+      ];
+
+    case 136:
+      return [
+        {
+          ID: id,
+          MessageType: "SDI-12 Measurement 5",
+          Value: parseSDIMeasurement(id, buffer, index + index_shift, port_id),
+        },
+        getSDISize(buffer, index + index_shift, port_id),
+      ];
+
+    case 137:
+      return [
+        {
+          ID: id,
+          MessageType: "SDI-12 Measurement 5 - Part 2",
+          Value: parseSDIMeasurement(id, buffer, index + index_shift, port_id),
+        },
+        getSDISize(buffer, index + index_shift, port_id),
+      ];
+
+    case 223:
+      return [
+        {
+          ID: 223,
+          MessageType: "Reserved",
+        },
+        0,
+      ];
+
+    default:
+      return null;
+  }
+}
+
+function parseLittleEndianInt32(buffer, offset) {
+  let result =
+    (buffer[offset + 3] << 24) +
+    (buffer[offset + 2] << 16) +
+    (buffer[offset + 1] << 8) +
+    buffer[offset];
+
+  if ((result & 0x80000000) > 0) result = result - 0x100000000;
+
+  return result;
+}
+
+function parseLittleEndianInt24(buffer, offset) {
+  let result =
+    (buffer[offset + 2] << 16) + (buffer[offset + 1] << 8) + buffer[offset];
+
+  if ((result & 0x800000) > 0) result = result - 0x1000000;
+
+  return result;
+}
+
+function parseLittleEndianInt16(buffer, offset) {
+  let result = (buffer[offset + 1] << 8) + buffer[offset];
+
+  if ((result & 0x8000) > 0) result = result - 0x10000;
+
+  return result;
+}
+
+function parseLittleEndianUInt16(buffer, offset) {
+  let result = (buffer[offset + 1] << 8) + buffer[offset];
+
+  return result;
+}
+
+function parseDecToBin(buffer) {
+  let bin_result = parseInt(buffer).toString(2);
+
+  return bin_result;
+}
+
+function parseSliceInt(value, start, length) {
+  let binary = parseDecToBin(
+    parseInt(value)
+      .toString(2)
+      .slice(start, start + length)
+  ).padStart(8, "0");
+
+  if (binary.includes("1")) {
+    return parseInt(binary, 2);
+  }
+
+  return 0;
+}
+
+function parseSliceInt16(value, start, length) {
+  let binary = parseDecToBin(
+    parseInt(value)
+      .toString(2)
+      .slice(start, start + length)
+  ).padStart(16, "0");
+
+  if (binary.includes("1")) {
+    return parseInt(binary, 2);
+  }
+
+  return 0;
+}
+
+function parseGPSData(buffer, index) {
+  if (buffer[index] == 255 && buffer[index + 1] == 255 && buffer[index + 2]) {
+    return "No fix available";
+  }
+
+  let latitude = 0.0000256 * parseLittleEndianInt24(buffer, index);
+  let longitude = 0.0000256 * parseLittleEndianInt24(buffer, index + 3);
+
+  return {
+    Latitude: latitude,
+    Longitude: longitude,
+  };
+}
+
+function parseVersionUplink(buffer, index) {
+  return {
+    Product: buffer[index],
+    HardwareRev: buffer[index + 1],
+    FirmwareMajor: buffer[index + 2],
+    FirmwareMinor: buffer[index + 3],
+  };
+}
+
+function parseAcknowledgementUplink(buffer, index) {
+  let seq_num = buffer[index] & 0x7f;
+  let downlink_state = (buffer[index] & 0x80) > 0;
+  let firmware_major = buffer[index + 1];
+  let firmware_minor = buffer[index + 2];
+
+  return {
+    SequenceNumber: seq_num,
+    DownlinkAccepted: downlink_state,
+    FirmwareMajor: firmware_major,
+    FirmwareMinor: firmware_minor,
+  };
+}
+
+function parseBatteryVoltage(buffer, index) {
+  return parseLittleEndianUInt16(buffer, index);
+}
+
+function parseAnalogIn(buffer, index) {
+  return parseLittleEndianUInt16(buffer, index);
+}
+
+function parseDigitalIOState(buffer, index) {
+  let digital_input_1_state = buffer[index] & 1 ? "1" : "0";
+  let digital_input_2_state = buffer[index] & 2 ? "1" : "0";
+  let digital_input_3_state = buffer[index] & 4 ? "1" : "0";
+  let digital_output_3v3_state = buffer[index] & 8 ? "1" : "0";
+
+  return {
+    DI1: digital_input_1_state,
+    DI2: digital_input_2_state,
+    DI3: digital_input_3_state,
+    DO3V3: digital_output_3v3_state,
+  };
+}
+
+function parseInputPulseCount(buffer, index) {
+  let input_pulse_count = parseLittleEndianUInt16(buffer, index);
+
+  return input_pulse_count;
+}
+
+function parseDigitalInputAlert(buffer, index) {
+  let current_digital_input_state = buffer[index];
+  let digital_input_trigger = buffer[index + 1];
+  let digital_input_1_change_count = parseLittleEndianUInt16(buffer, index + 2);
+  let digital_input_2_change_count = parseLittleEndianUInt16(buffer, index + 4);
+
+  return {
+    CurrentDigitalInputState: current_digital_input_state,
+    DigitalInputAlertTrigger: digital_input_trigger,
+    DigitalInput1ChangeCount: digital_input_1_change_count,
+    DigitalInput2ChangeCount: digital_input_2_change_count,
+  };
+}
+
+function parseInternalTemperature(buffer, index) {
+  let internal_temperature = parseLittleEndianInt16(buffer, index) / 100;
+
+  return internal_temperature;
+}
+
+function parseI2CTempProbe(buffer, index) {
+  let temp_probe = parseLittleEndianInt16(buffer, index) / 100;
+
+  return temp_probe;
+}
+
+function parseI2CTempRelativeHumidity(buffer, index) {
+  let temperature = parseLittleEndianInt16(buffer, index) / 100;
+  let relative_humidity = buffer[index + 2] / 2;
+
+  return {
+    Temperature: temperature,
+    RelativeHumidity: relative_humidity,
+  };
+}
+
+function parseBatteryEnergySincePower(buffer, index) {
+  let battery_energy_used = parseLittleEndianInt16(buffer, index);
+
+  return battery_energy_used;
+}
+
+function parseEstimatedBatteryRemaining(buffer, index) {
+  let estimated_battery_remaining = parseLittleEndianInt16(buffer, index);
+
+  return estimated_battery_remaining;
+}
+
+function parseSDISoilMoistureData(buffer, index, num_samples) {
+  let data = [];
+
+  for (let i = 0; i < num_samples; i++) {
+    data.push(buffer[index + i + 1] / 2 - 5);
+  }
+
+  return data;
+}
+
+function parseSDITempData(buffer, index, num_samples) {
+  let data = [];
+
+  for (let i = 0; i < num_samples; i++) {
+    data.push(buffer[index + i + 1] / 2 - 40);
+  }
+
+  return data;
+}
+
+function parseSDIINT16Data(buffer, index, num_samples) {
+  let data = [];
+
+  for (let i = 0; i < num_samples; i++) {
+    data.push(parseLittleEndianInt16(buffer, index + i * 2 + 1) / 100);
+  }
+
+  return data;
+}
+
+function parseSDIINT32Data(buffer, index, num_samples) {
+  let data = [];
+
+  for (let i = 0; i < num_samples; i++) {
+    data.push(parseLittleEndianInt32(buffer, index + i * 4 + 1) / 1000);
+  }
+
+  return data;
+}
+
+function parseSDIINT12Data(buffer, index, num_samples) {
+  let data = [];
+
+  for (let i = 0; i < num_samples; i++) {
+    let rawVal = 0;
+    let twiceOffset = i * 3;
+    if ((twiceOffset & 1) > 0) {
+      rawVal =
+        ((buffer[index + 1 + (twiceOffset - 1) / 2] & 0xf) << 8) +
+        buffer[index + 1 + (twiceOffset + 1) / 2];
+    } else {
+      rawVal =
+        (buffer[index + 1 + twiceOffset / 2] << 4) +
+        (buffer[index + 1 + twiceOffset / 2 + 1] >> 4);
+    }
+    data.push(rawVal / 20 - 50);
+  }
+
+  return data;
+}
+
+function getSDISize(buffer, index, port_id) {
+  let num_samples = buffer[index] & 0x0f;
+  let data_type_id = buffer[index] >> 4;
+  let size = 0;
+
+  switch (data_type_id) {
+    case 0: //Soil moisture
+      size = num_samples + 1;
+      return size;
+
+    case 1: // Temperature
+      size = num_samples + 1;
+      return size;
+
+    case 2: //INT16
+      size = num_samples * 2 + 1;
+      return size;
+
+    case 3: //INT32
+      size = num_samples * 4 + 1;
+      return size;
+
+    case 4: //INT12
+      size = Math.ceil(num_samples * 1.5) + 1;
+      return size;
+
+    default:
+      size = 0 + 1;
+      return size;
+  }
+}
+
+function parseSDIMeasurement(id, buffer, index, port_id) {
+  let num_samples = buffer[index] & 0x0f;
+  let data_type_id = buffer[index] >> 4;
+  let data = null;
+
+  switch (data_type_id) {
+    case 0: //Soil moisture
+      data = parseSDISoilMoistureData(buffer, index, num_samples);
+      return data;
+
+    case 1: //Temperature
+      data = parseSDITempData(buffer, index, num_samples);
+      return data;
+
+    case 2: //INT16
+      data = parseSDIINT16Data(buffer, index, num_samples);
+      return data;
+
+    case 3: //INT32
+      data = parseSDIINT32Data(buffer, index, num_samples);
+      return data;
+
+    case 4: //INT12
+      data = parseSDIINT12Data(buffer, index, num_samples);
+      return data;
+
+    default:
+      data = null;
+      return data;
+  }
+}
