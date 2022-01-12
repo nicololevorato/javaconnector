@@ -1,51 +1,32 @@
 package com.tesilevorato.JavaMqttClient;
 
-import java.net.MalformedURLException;
-import java.net.URL;
 import java.sql.Connection;
 import java.sql.DriverManager;
 import java.sql.PreparedStatement;
 import java.sql.ResultSet;
 import java.sql.SQLException;
 import java.util.ArrayList;
-
-
 import com.google.gson.Gson;
-
+import com.tesilevorato.ConnettoreUtility;
 import org.json.JSONException;
 import org.json.JSONObject;
-
-import org.ugeojson.model.feature.FeatureDto;
-import org.ugeojson.model.geometry.PointDto;
-
 import de.fraunhofer.iosb.ilt.sta.ServiceFailureException;
 import de.fraunhofer.iosb.ilt.sta.model.Datastream;
 import de.fraunhofer.iosb.ilt.sta.model.FeatureOfInterest;
-import de.fraunhofer.iosb.ilt.sta.model.Id;
-import de.fraunhofer.iosb.ilt.sta.model.IdString;
-import de.fraunhofer.iosb.ilt.sta.model.Location;
-import de.fraunhofer.iosb.ilt.sta.model.Observation;
 import de.fraunhofer.iosb.ilt.sta.model.ObservedProperty;
 import de.fraunhofer.iosb.ilt.sta.model.Sensor;
 import de.fraunhofer.iosb.ilt.sta.model.Thing;
-import de.fraunhofer.iosb.ilt.sta.model.ext.EntityList;
 import de.fraunhofer.iosb.ilt.sta.model.ext.UnitOfMeasurement;
 import de.fraunhofer.iosb.ilt.sta.service.SensorThingsService;
 
 public class ConnettoreDatasense {
-  Connection conn = null;
-  SensorThingsService service = null;
+  SensorThingsService service;
+  ConnettoreUtility utility;
+  Connection conn;
   public ConnettoreDatasense()  {
-    //connsessione al servizio SensorThings
-    URL serviceEndpoint;
-    try {
-      serviceEndpoint = new URL("http://localhost:8080/FROST-Server/v1.0");
-      service = new SensorThingsService(serviceEndpoint);
-      System.out.println("Connesso al servizio sensorthings");
-    } catch (MalformedURLException e1) {
-
-      e1.printStackTrace();
-    }
+    utility=new ConnettoreUtility();
+    service=utility.ConnectionSensorThings();
+    System.out.println("Connesso al servizio sensorthings");
     //connessione db sql locale
 
     try {
@@ -80,99 +61,7 @@ public class ConnettoreDatasense {
   
   //#endregion
 
-  private void CreateLocation(Thing temp_thing, Double lat, Double lon) throws ServiceFailureException {
-    FeatureDto feature = new FeatureDto();
-    PointDto point = new PointDto(lat, lon);
-    feature.setGeometry(point);
-    //feature.setProperties("{}");
-    String featureGeo = "{'type':'Feature','geometry':{'type': 'Point','coordinates': [" + lat + "," + lon + "]}}"; //FeatureBuilder.getInstance().toGeoJSON(feature);//"{\"type\":\"Feature\",\"geometry\":{\"type\": \"Point\",\"coordinates\": [-114.06,51.05]}}"
-    Location loc = new Location();
-    Gson gson = new Gson();
-    Object object = gson.fromJson(featureGeo, Object.class);
-    loc.setLocation(object);
-    loc.setEncodingType("application/vnd.geo+json");
-    loc.setName(temp_thing.getName() + " position");
-    loc.setDescription("Current position of " + temp_thing.getName());
-    service.create(loc);
-  }
-  private Datastream CreateDatastream(Thing temp_thing, String name, String description, UnitOfMeasurement unitOfMeasurement, String observationType, Sensor sensor,ObservedProperty obsPro) {
-      Datastream datastream = new Datastream();
-      datastream.setName(name);
-      datastream.setDescription(description);
-      datastream.setUnitOfMeasurement(unitOfMeasurement);
-      datastream.setObservationType(observationType);
-      datastream.setThing(temp_thing);
-      //IdString id=new IdString(name);
-      //datastream.setId(id);
-      datastream.setSensor(sensor);
-      datastream.setObservedProperty(obsPro);
-      try {
-        service.create(datastream);
-      } catch (ServiceFailureException e) {
-        
-        e.printStackTrace();
-      }
-      return datastream;
-    }
-  private ObservedProperty CreateObservedProperty(String name, String definition, String description){
-    try{
-      return service.observedProperties().query().filter("name eq '"+name+"'").first();
-    } catch(ServiceFailureException e1){
-      ObservedProperty obsPro=new ObservedProperty();
-      obsPro.setName(name);
-      obsPro.setDefinition(definition);
-      obsPro.setDescription(description);
-      //IdString id=new IdString(name);
-      //obsPro.setId(id);
-      try {
-        service.create(obsPro);
-      } catch (ServiceFailureException e2) {
-      }
-      return obsPro;
-    }
-  }
-  private Sensor CreateSensor(String name, String description, String encodingType, Object metadata){
-    Sensor sensor=new Sensor();
-    sensor.setName(name);   
-    sensor.setDescription(description);
-    sensor.setMetadata(metadata);
-    IdString id=new IdString("Datasense");
-    sensor.setId(id);
-    try {
-      service.create(sensor);
-    } catch (ServiceFailureException e) {
-      e.printStackTrace();
-    }
-    return sensor;
-}
-  private void CreateObservation(Datastream datastream, Object value, FeatureOfInterest foi) throws ServiceFailureException {
-    Observation obs = new Observation();
-    obs.setResult(value);
-    obs.setFeatureOfInterest(foi);
-    datastream.observations().create(obs);
-  }
-  private FeatureOfInterest CreateFeatureOfInterest(String name, String description, Object feature) {
-    FeatureOfInterest foi;
-    try{
-    foi=service.featuresOfInterest().query().filter("name eq '"+name+"'").first();
-    if(foi!=null){
-      return foi;
-    }
-    } catch (ServiceFailureException e1){
-      System.out.println("Problema featureofinterest");
-    }
-    foi=new FeatureOfInterest();
-    foi.setEncodingType("application/vnd.geo+json");
-    foi.setDescription(description);
-    foi.setName(name);
-    foi.setFeature(feature);
-    try {
-      service.featuresOfInterest().create(foi);
-    } catch (ServiceFailureException e) {
-      e.printStackTrace();
-    }
-    return foi;
-    }
+  
   
   
   public void datasense(String payload, int thingId, int portId) throws JSONException, ServiceFailureException {
@@ -191,7 +80,7 @@ public class ConnettoreDatasense {
     //   CreateDatastream(thing, "SDI-12 Measurement "+i, "SDI-12 Measurement "+i, um, "OM_Measurement", sensor, obs);
     // }
     int[] buffer;
-    buffer = getHex(payload);
+    buffer = utility.getHex(payload);
     int payload_length = buffer.length;
     int iterated_message_length = 0;
     int temp_msg_lenght = parseDataField(buffer, iterated_message_length, portId, thing, sensor);
@@ -232,14 +121,14 @@ public class ConnettoreDatasense {
 
     case 10: {
       double[] lat_lon = parseGPSData(buffer, index + index_shift);
-      CreateLocation(thing, lat_lon[0], lat_lon[1]);
+      utility.CreateLocation(thing, lat_lon[0], lat_lon[1]);
       return 6;
     }
     case 20: {
       int value = parseBatteryVoltage(buffer, index + index_shift);
-      ObservedProperty observedProperty=CreateObservedProperty("Battery Voltage", "Battery Voltage", "Battery Voltage");
+      ObservedProperty observedProperty=utility.CreateObservedProperty("Battery Voltage", "Battery Voltage", "Battery Voltage");
       Datastream datastream=null;
-      FeatureOfInterest foi=CreateFeatureOfInterest("Battery voltage", "Battery voltage", placeholder);
+      FeatureOfInterest foi=utility.CreateFeatureOfInterest("Battery voltage", "Battery voltage", placeholder);
       try {
         datastream=service.datastreams().query().filter("name eq 'Battery Voltage'").first();
       } catch (ServiceFailureException e) {
@@ -247,33 +136,33 @@ public class ConnettoreDatasense {
       }
       if(datastream==null){
         UnitOfMeasurement unitOfMeasurement = new UnitOfMeasurement("milliVolt", "mV", "Voltage/1000");
-        datastream = CreateDatastream(thing, "Battery Voltage", "description", unitOfMeasurement, "OM_CountObservation", sensor,observedProperty);
+        datastream = utility.CreateDatastream(thing, "Battery Voltage", "description", unitOfMeasurement, "OM_CountObservation", sensor,observedProperty);
       }
-        CreateObservation(datastream, value,foi);
+      utility.CreateObservation(datastream, value,foi);
       return 2;
     }
 
     case 21: {
       int value = parseAnalogIn(buffer, index + index_shift);
-      ObservedProperty observedProperty=CreateObservedProperty("Analog In 1", "Analog In 1", "Analog In 1");
+      ObservedProperty observedProperty=utility.CreateObservedProperty("Analog In 1", "Analog In 1", "Analog In 1");
       Datastream datastream=null;
-      FeatureOfInterest foi=CreateFeatureOfInterest("Analog In 1", "Analog In 1", placeholder);
+      FeatureOfInterest foi=utility.CreateFeatureOfInterest("Analog In 1", "Analog In 1", placeholder);
       try {
         datastream=service.datastreams().query().filter("name eq 'Analog In 1'").first();
       } catch (ServiceFailureException e) {
       }
       if(datastream==null){
         UnitOfMeasurement unitOfMeasurement = new UnitOfMeasurement("milliVolt", "mV", "Voltage/1000");
-        datastream = CreateDatastream(thing, "Analog In 1", "description", unitOfMeasurement, "OM_CountObservation",sensor,observedProperty);
+        datastream = utility.CreateDatastream(thing, "Analog In 1", "description", unitOfMeasurement, "OM_CountObservation",sensor,observedProperty);
       }
-      CreateObservation(datastream, value,foi);
+      utility.CreateObservation(datastream, value,foi);
       return 2;
     }
     case 22: {
       int value = parseAnalogIn(buffer, index + index_shift);
-      ObservedProperty observedProperty=CreateObservedProperty("Analog In 2", "Analog In 2", "Analog In 2");
+      ObservedProperty observedProperty=utility.CreateObservedProperty("Analog In 2", "Analog In 2", "Analog In 2");
       Datastream datastream=null;
-      FeatureOfInterest foi=CreateFeatureOfInterest("Analog In 2", "Analog In 2", placeholder);
+      FeatureOfInterest foi=utility.CreateFeatureOfInterest("Analog In 2", "Analog In 2", placeholder);
       try {
         datastream=service.datastreams().query().filter("name eq 'Analog In 2'").first();
       } catch (ServiceFailureException e) {
@@ -281,17 +170,17 @@ public class ConnettoreDatasense {
       }
       if(datastream==null){
         UnitOfMeasurement unitOfMeasurement = new UnitOfMeasurement("milliVolt", "mV", "Voltage/1000");
-        datastream = CreateDatastream(thing, "Analog In 2", "description", unitOfMeasurement, "OM_CountObservation",sensor,observedProperty);
+        datastream = utility.CreateDatastream(thing, "Analog In 2", "description", unitOfMeasurement, "OM_CountObservation",sensor,observedProperty);
       }
-      CreateObservation(datastream, value,foi);
+      utility.CreateObservation(datastream, value,foi);
       return 2;
     }
 
     case 23: {
       int value = parseAnalogIn(buffer, index + index_shift);
-      ObservedProperty observedProperty=CreateObservedProperty("Analog In 3", "Analog In 3", "Analog In 3");
+      ObservedProperty observedProperty=utility.CreateObservedProperty("Analog In 3", "Analog In 3", "Analog In 3");
       Datastream datastream=null;
-      FeatureOfInterest foi=CreateFeatureOfInterest("Analog In 3", "Analog In 3", placeholder);
+      FeatureOfInterest foi=utility.CreateFeatureOfInterest("Analog In 3", "Analog In 3", placeholder);
       try {
         datastream=service.datastreams().query().filter("name eq 'Analog In 3'").first();
       } catch (ServiceFailureException e) {
@@ -299,9 +188,9 @@ public class ConnettoreDatasense {
       }
       if(datastream==null){
         UnitOfMeasurement unitOfMeasurement = new UnitOfMeasurement("milliVolt", "mV", "Voltage/1000");
-        datastream = CreateDatastream(thing, "Analog In 3", "description", unitOfMeasurement, "OM_CountObservation",sensor,observedProperty);
+        datastream = utility.CreateDatastream(thing, "Analog In 3", "description", unitOfMeasurement, "OM_CountObservation",sensor,observedProperty);
       }
-      CreateObservation(datastream, value,foi);
+      utility.CreateObservation(datastream, value,foi);
       return 2;
     }
 
@@ -327,9 +216,9 @@ public class ConnettoreDatasense {
 
     case 40: {
       double value = parseInternalTemperature(buffer, index + index_shift);
-      ObservedProperty observedProperty=CreateObservedProperty("Internal Temperature", "Internal Temperature", "Internal Temperature");
+      ObservedProperty observedProperty=utility.CreateObservedProperty("Internal Temperature", "Internal Temperature", "Internal Temperature");
       Datastream datastream=null;
-      FeatureOfInterest foi=CreateFeatureOfInterest("Internal Temperature", "Internal Temperature", placeholder);
+      FeatureOfInterest foi=utility.CreateFeatureOfInterest("Internal Temperature", "Internal Temperature", placeholder);
       try {
         datastream=service.datastreams().query().filter("name eq 'Internal Temperature'").first();
       } catch (ServiceFailureException e) {
@@ -337,16 +226,16 @@ public class ConnettoreDatasense {
       }
       if(datastream==null){
         UnitOfMeasurement unitOfMeasurement = new UnitOfMeasurement("Celsius", "°C", "Celsius Degree");
-        datastream = CreateDatastream(thing, "Internal Temperature", "description", unitOfMeasurement, "OM_Measurement",sensor,observedProperty);
+        datastream = utility.CreateDatastream(thing, "Internal Temperature", "description", unitOfMeasurement, "OM_Measurement",sensor,observedProperty);
       }
-      CreateObservation(datastream, value,foi);
+      utility.CreateObservation(datastream, value,foi);
       return 2;
     }
     case 41: {
       double value = parseI2CTempProbe(buffer, index + index_shift);
-      ObservedProperty observedProperty=CreateObservedProperty("Digital Matter I2C Temperature Probe 1 (Red)", "Digital Matter I2C Temperature Probe 1 (Red)", "Digital Matter I2C Temperature Probe 1 (Red)");
+      ObservedProperty observedProperty=utility.CreateObservedProperty("Digital Matter I2C Temperature Probe 1 (Red)", "Digital Matter I2C Temperature Probe 1 (Red)", "Digital Matter I2C Temperature Probe 1 (Red)");
       Datastream datastream=null;
-      FeatureOfInterest foi=CreateFeatureOfInterest("Digital Matter I2C Temperature Probe 1 (Red)", "Digital Matter I2C Temperature Probe 1 (Red)", placeholder);
+      FeatureOfInterest foi=utility.CreateFeatureOfInterest("Digital Matter I2C Temperature Probe 1 (Red)", "Digital Matter I2C Temperature Probe 1 (Red)", placeholder);
       try {
         datastream=service.datastreams().query().filter("name eq 'Digital Matter I2C Temperature Probe 1 (Red)'").first();
       } catch (ServiceFailureException e) {
@@ -354,16 +243,16 @@ public class ConnettoreDatasense {
       }
       if(datastream==null){
         UnitOfMeasurement unitOfMeasurement = new UnitOfMeasurement("Celsius", "°C", "Celsius Degree");
-        datastream = CreateDatastream(thing, "Digital Matter I2C Temperature Probe 1 (Red)", "description", unitOfMeasurement, "OM_Measurement",sensor,observedProperty);
+        datastream = utility.CreateDatastream(thing, "Digital Matter I2C Temperature Probe 1 (Red)", "description", unitOfMeasurement, "OM_Measurement",sensor,observedProperty);
       }
-      CreateObservation(datastream, value,foi);
+      utility.CreateObservation(datastream, value,foi);
       return 2;
     }
     case 42: {
       double value = parseI2CTempProbe(buffer, index + index_shift);
-      ObservedProperty observedProperty=CreateObservedProperty("Digital Matter I2C Temperature Probe 2 (Blue)", "Digital Matter I2C Temperature Probe 2 (Blue)", "Digital Matter I2C Temperature Probe 2 (Blue)");
+      ObservedProperty observedProperty=utility.CreateObservedProperty("Digital Matter I2C Temperature Probe 2 (Blue)", "Digital Matter I2C Temperature Probe 2 (Blue)", "Digital Matter I2C Temperature Probe 2 (Blue)");
       Datastream datastream=null;
-      FeatureOfInterest foi=CreateFeatureOfInterest("Digital Matter I2C Temperature Probe 2 (Blue)", "Digital Matter I2C Temperature Probe 2 (Blue)", placeholder);
+      FeatureOfInterest foi=utility.CreateFeatureOfInterest("Digital Matter I2C Temperature Probe 2 (Blue)", "Digital Matter I2C Temperature Probe 2 (Blue)", placeholder);
       try {
         datastream=service.datastreams().query().filter("name eq 'Digital Matter I2C Temperature Probe 2 (Blue)'").first();
       } catch (ServiceFailureException e) {
@@ -371,28 +260,28 @@ public class ConnettoreDatasense {
       }
       if(datastream==null){
         UnitOfMeasurement unitOfMeasurement = new UnitOfMeasurement("Celsius", "°C", "Celsius Degree");
-        datastream = CreateDatastream(thing, "Digital Matter I2C Temperature Probe 2 (Blue)", "description", unitOfMeasurement, "OM_Measurement",sensor,observedProperty);
+        datastream = utility.CreateDatastream(thing, "Digital Matter I2C Temperature Probe 2 (Blue)", "description", unitOfMeasurement, "OM_Measurement",sensor,observedProperty);
       }
-      CreateObservation(datastream, value,foi);
+      utility.CreateObservation(datastream, value,foi);
       return 2;
     }
 
     case 43: {
       double[] values = parseI2CTempRelativeHumidity(buffer, index + index_shift);
-      ObservedProperty observedProperty=CreateObservedProperty("Digital Matter I2C Temperature", "Digital Matter I2C Temperature", "Digital Matter I2C Temperature");
+      ObservedProperty observedProperty=utility.CreateObservedProperty("Digital Matter I2C Temperature", "Digital Matter I2C Temperature", "Digital Matter I2C Temperature");
       Datastream datastream=null;
-      FeatureOfInterest foi=CreateFeatureOfInterest("Digital Matter I2C Temperature", "Digital Matter I2C Temperature", placeholder);
+      FeatureOfInterest foi=utility.CreateFeatureOfInterest("Digital Matter I2C Temperature", "Digital Matter I2C Temperature", placeholder);
       try {
         datastream=service.datastreams().query().filter("name eq 'Digital Matter I2C Temperature'").first();
       } catch (ServiceFailureException e) {
       }
       if(datastream==null){
         UnitOfMeasurement unitOfMeasurement = new UnitOfMeasurement("Celsius", "°C", "Celsius Degree");
-        datastream = CreateDatastream(thing, "Digital Matter I2C Temperature", "description", unitOfMeasurement, "OM_Measurement",sensor,observedProperty);
+        datastream = utility.CreateDatastream(thing, "Digital Matter I2C Temperature", "description", unitOfMeasurement, "OM_Measurement",sensor,observedProperty);
       
       }
-      CreateObservation(datastream, values[0],foi); 
-      foi=CreateFeatureOfInterest("Digital Matter I2C Relative Humidity", "Digital Matter I2C Relative Humidity", placeholder);  
+      utility.CreateObservation(datastream, values[0],foi); 
+      foi=utility.CreateFeatureOfInterest("Digital Matter I2C Relative Humidity", "Digital Matter I2C Relative Humidity", placeholder);  
       try {
         datastream=service.datastreams().query().filter("name eq 'Digital Matter I2C Relative Humidity'").first();
       } catch (ServiceFailureException e) {
@@ -400,17 +289,17 @@ public class ConnettoreDatasense {
       }
       if(datastream==null){
         UnitOfMeasurement unitOfMeasurement = new UnitOfMeasurement("Percentage", "%", "1/100");
-        datastream = CreateDatastream(thing, "Digital Matter I2C Relative Humidity", "description", unitOfMeasurement, "OM_Measurement",sensor,observedProperty);
+        datastream = utility.CreateDatastream(thing, "Digital Matter I2C Relative Humidity", "description", unitOfMeasurement, "OM_Measurement",sensor,observedProperty);
       }
-      CreateObservation(datastream, values[0],foi);
+      utility.CreateObservation(datastream, values[0],foi);
       return 3;
     }
 
     case 50: {
       int value = parseBatteryEnergySincePower(buffer, index + index_shift);
-      ObservedProperty observedProperty=CreateObservedProperty("Battery Energy Used Since Power Up", "Battery Energy Used Since Power Up", "Battery Energy Used Since Power Up");
+      ObservedProperty observedProperty=utility.CreateObservedProperty("Battery Energy Used Since Power Up", "Battery Energy Used Since Power Up", "Battery Energy Used Since Power Up");
       Datastream datastream=null;
-      FeatureOfInterest foi=CreateFeatureOfInterest("Battery Energy Used Since Power Up", "Battery Energy Used Since Power Up", placeholder);
+      FeatureOfInterest foi=utility.CreateFeatureOfInterest("Battery Energy Used Since Power Up", "Battery Energy Used Since Power Up", placeholder);
       try {
         datastream=service.datastreams().query().filter("name eq 'Battery Energy Used Since Power Up'").first();
       } catch (ServiceFailureException e) {
@@ -418,17 +307,17 @@ public class ConnettoreDatasense {
       }
       if(datastream==null){
         UnitOfMeasurement unitOfMeasurement = new UnitOfMeasurement("milli Ampere hour", "mAh", "Amper/(hour*1000)");
-        datastream = CreateDatastream(thing, "Battery Energy Used Since Power Up", "description", unitOfMeasurement, "OM_Measurement",sensor,observedProperty);
+        datastream = utility.CreateDatastream(thing, "Battery Energy Used Since Power Up", "description", unitOfMeasurement, "OM_Measurement",sensor,observedProperty);
       }
-      CreateObservation(datastream, value,foi);
+      utility.CreateObservation(datastream, value,foi);
       return 2;
     }
 
     case 51: {
       int value = parseEstimatedBatteryRemaining(buffer, index + index_shift);
-      ObservedProperty observedProperty=CreateObservedProperty("Estimated Battery % Remaining","Estimated Battery % Remaining","Estimated Battery % Remaining");
+      ObservedProperty observedProperty=utility.CreateObservedProperty("Estimated Battery % Remaining","Estimated Battery % Remaining","Estimated Battery % Remaining");
       Datastream datastream=null;
-      FeatureOfInterest foi=CreateFeatureOfInterest("Estimated Battery % Remaining", "Estimated Battery % Remaining", placeholder);
+      FeatureOfInterest foi=utility.CreateFeatureOfInterest("Estimated Battery % Remaining", "Estimated Battery % Remaining", placeholder);
       try {
         datastream=service.datastreams().query().filter("name eq 'Estimated Battery % Remaining'").first();
       } catch (ServiceFailureException e) {
@@ -436,9 +325,9 @@ public class ConnettoreDatasense {
       }
       if(datastream==null){
         UnitOfMeasurement unitOfMeasurement = new UnitOfMeasurement("Percentage", "%", "1/100");
-        datastream = CreateDatastream(thing, "Estimated Battery % Remaining", "description", unitOfMeasurement, "OM_Measurement",sensor,observedProperty);
+        datastream = utility.CreateDatastream(thing, "Estimated Battery % Remaining", "description", unitOfMeasurement, "OM_Measurement",sensor,observedProperty);
       }
-      CreateObservation(datastream, value,foi);
+      utility.CreateObservation(datastream, value,foi);
       return 1;
     }
 
@@ -446,11 +335,11 @@ public class ConnettoreDatasense {
       ArrayList < Double > values = parseSDIMeasurement(id, buffer, index + index_shift);
       //ObservedProperty observedProperty=CreateObservedProperty("SDI-12 Measurement 1","SDI-12 Measurement 1","SDI-12 Measurement 1");
       Datastream datastream=null;
-      FeatureOfInterest foi=CreateFeatureOfInterest("SDI-12 Measurement 1", "SDI-12 Measurement 1", placeholder);
+      FeatureOfInterest foi=utility.CreateFeatureOfInterest("SDI-12 Measurement 1", "SDI-12 Measurement 1", placeholder);
       try {
         datastream=service.datastreams().query().filter("name eq 'SDI-12 Measurement 1'").first();
         for (Double value: values) {
-          CreateObservation(datastream, value,foi);
+          utility.CreateObservation(datastream, value,foi);
         }
       } catch (ServiceFailureException e) {
         System.out.println(("Datastream misurazione non presente!"));
@@ -463,11 +352,11 @@ public class ConnettoreDatasense {
       ArrayList < Double > values = parseSDIMeasurement(id, buffer, index + index_shift);
       // ObservedProperty observedProperty=CreateObservedProperty("SDI-12 Measurement 1","SDI-12 Measurement 1","SDI-12 Measurement 1");
       Datastream datastream=null;
-      FeatureOfInterest foi=CreateFeatureOfInterest("SDI-12 Measurement 1", "SDI-12 Measurement 1", placeholder);
+      FeatureOfInterest foi=utility.CreateFeatureOfInterest("SDI-12 Measurement 1", "SDI-12 Measurement 1", placeholder);
       try {
         datastream=service.datastreams().query().filter("name eq 'SDI-12 Measurement 1'").first();
         for (Double value: values) {
-          CreateObservation(datastream, value,foi);
+          utility.CreateObservation(datastream, value,foi);
         }
       } catch (ServiceFailureException e) {
         System.out.println(("Datastream misurazione non presente!"));
@@ -481,11 +370,11 @@ public class ConnettoreDatasense {
       ArrayList < Double > values = parseSDIMeasurement(id, buffer, index + index_shift);
       // ObservedProperty observedProperty=CreateObservedProperty("SDI-12 Measurement 2","SDI-12 Measurement 2","SDI-12 Measurement 2");
       Datastream datastream=null;
-      FeatureOfInterest foi=CreateFeatureOfInterest("SDI-12 Measurement 2", "SDI-12 Measurement 2", placeholder);
+      FeatureOfInterest foi=utility.CreateFeatureOfInterest("SDI-12 Measurement 2", "SDI-12 Measurement 2", placeholder);
       try {
         datastream=service.datastreams().query().filter("name eq 'SDI-12 Measurement 2'").first();
         for (Double value: values) {
-          CreateObservation(datastream, value,foi);
+          utility.CreateObservation(datastream, value,foi);
         }
       } catch (ServiceFailureException e) {
         System.out.println(("Datastream misurazione non presente!"));
@@ -499,11 +388,11 @@ public class ConnettoreDatasense {
       ArrayList < Double > values = parseSDIMeasurement(id, buffer, index + index_shift);
       // ObservedProperty observedProperty=CreateObservedProperty("SDI-12 Measurement 2","SDI-12 Measurement 2","SDI-12 Measurement 2");
       Datastream datastream=null;
-      FeatureOfInterest foi=CreateFeatureOfInterest("SDI-12 Measurement 2", "SDI-12 Measurement 2", placeholder);
+      FeatureOfInterest foi=utility.CreateFeatureOfInterest("SDI-12 Measurement 2", "SDI-12 Measurement 2", placeholder);
       try {
         datastream=service.datastreams().query().filter("name eq 'SDI-12 Measurement 2'").first();
         for (Double value: values) {
-          CreateObservation(datastream, value,foi);
+          utility.CreateObservation(datastream, value,foi);
         }
       } catch (ServiceFailureException e) {
         System.out.println(("Datastream misurazione non presente!"));
@@ -517,11 +406,11 @@ public class ConnettoreDatasense {
       ArrayList < Double > values = parseSDIMeasurement(id, buffer, index + index_shift);
       // ObservedProperty observedProperty=CreateObservedProperty("SDI-12 Measurement 3","SDI-12 Measurement 3","SDI-12 Measurement 3");
       Datastream datastream=null;
-      FeatureOfInterest foi=CreateFeatureOfInterest("SDI-12 Measurement 3", "SDI-12 Measurement 3", placeholder);
+      FeatureOfInterest foi=utility.CreateFeatureOfInterest("SDI-12 Measurement 3", "SDI-12 Measurement 3", placeholder);
       try {
         datastream=service.datastreams().query().filter("name eq 'SDI-12 Measurement 3'").first();
         for (Double value: values) {
-          CreateObservation(datastream, value,foi);
+          utility.CreateObservation(datastream, value,foi);
         }
       } catch (ServiceFailureException e) {
         System.out.println(("Datastream misurazione non presente!"));
@@ -535,11 +424,11 @@ public class ConnettoreDatasense {
       ArrayList < Double > values = parseSDIMeasurement(id, buffer, index + index_shift);
       // ObservedProperty observedProperty=CreateObservedProperty("SDI-12 Measurement 3","SDI-12 Measurement 3","SDI-12 Measurement 3");
       Datastream datastream=null;
-      FeatureOfInterest foi=CreateFeatureOfInterest("SDI-12 Measurement 3", "SDI-12 Measurement 3", placeholder);
+      FeatureOfInterest foi=utility.CreateFeatureOfInterest("SDI-12 Measurement 3", "SDI-12 Measurement 3", placeholder);
       try {
         datastream=service.datastreams().query().filter("name eq 'SDI-12 Measurement 3'").first();
         for (Double value: values) {
-          CreateObservation(datastream, value,foi);
+          utility.CreateObservation(datastream, value,foi);
         }
       } catch (ServiceFailureException e) {
         System.out.println(("Datastream misurazione non presente!"));
@@ -553,11 +442,11 @@ public class ConnettoreDatasense {
       ArrayList < Double > values = parseSDIMeasurement(id, buffer, index + index_shift);
       // ObservedProperty observedProperty=CreateObservedProperty("SDI-12 Measurement 4","SDI-12 Measurement 4","SDI-12 Measurement 4");
       Datastream datastream=null;
-      FeatureOfInterest foi=CreateFeatureOfInterest("SDI-12 Measurement 4", "SDI-12 Measurement 4", placeholder);
+      FeatureOfInterest foi=utility.CreateFeatureOfInterest("SDI-12 Measurement 4", "SDI-12 Measurement 4", placeholder);
       try {
         datastream=service.datastreams().query().filter("name eq 'SDI-12 Measurement 4'").first();
         for (Double value: values) {
-          CreateObservation(datastream, value,foi);
+          utility.CreateObservation(datastream, value,foi);
         }
       } catch (ServiceFailureException e) {
         System.out.println(("Datastream misurazione non presente!"));
@@ -571,11 +460,11 @@ public class ConnettoreDatasense {
       ArrayList < Double > values = parseSDIMeasurement(id, buffer, index + index_shift);
       // ObservedProperty observedProperty=CreateObservedProperty("SDI-12 Measurement 4","SDI-12 Measurement 4","SDI-12 Measurement 4");
       Datastream datastream=null;
-      FeatureOfInterest foi=CreateFeatureOfInterest("SDI-12 Measurement 4", "SDI-12 Measurement 4", placeholder);
+      FeatureOfInterest foi=utility.CreateFeatureOfInterest("SDI-12 Measurement 4", "SDI-12 Measurement 4", placeholder);
       try {
         datastream=service.datastreams().query().filter("name eq 'SDI-12 Measurement 4'").first();
         for (Double value: values) {
-          CreateObservation(datastream, value,foi);
+          utility.CreateObservation(datastream, value,foi);
         }
       } catch (ServiceFailureException e) {
         System.out.println(("Datastream misurazione non presente!"));
@@ -589,11 +478,11 @@ public class ConnettoreDatasense {
       ArrayList < Double > values = parseSDIMeasurement(id, buffer, index + index_shift);
       // ObservedProperty observedProperty=CreateObservedProperty("SDI-12 Measurement 5","SDI-12 Measurement 5","SDI-12 Measurement 5");
       Datastream datastream=null;
-      FeatureOfInterest foi=CreateFeatureOfInterest("SDI-12 Measurement 5", "SDI-12 Measurement 5", placeholder);
+      FeatureOfInterest foi=utility.CreateFeatureOfInterest("SDI-12 Measurement 5", "SDI-12 Measurement 5", placeholder);
       try {
         datastream=service.datastreams().query().filter("name eq 'SDI-12 Measurement 5'").first();
         for (Double value: values) {
-          CreateObservation(datastream, value,foi);
+          utility.CreateObservation(datastream, value,foi);
         }
       } catch (ServiceFailureException e) {
         System.out.println(("Datastream misurazione non presente!"));
@@ -607,11 +496,11 @@ public class ConnettoreDatasense {
       ArrayList < Double > values = parseSDIMeasurement(id, buffer, index + index_shift);
       // ObservedProperty observedProperty=CreateObservedProperty("SDI-12 Measurement 5","SDI-12 Measurement 5","SDI-12 Measurement 5");
       Datastream datastream=null;
-      FeatureOfInterest foi=CreateFeatureOfInterest("SDI-12 Measurement 5", "SDI-12 Measurement 5", placeholder);
+      FeatureOfInterest foi=utility.CreateFeatureOfInterest("SDI-12 Measurement 5", "SDI-12 Measurement 5", placeholder);
       try {
         datastream=service.datastreams().query().filter("name eq 'SDI-12 Measurement 5'").first();
         for (Double value: values) {
-          CreateObservation(datastream, value,foi);
+          utility.CreateObservation(datastream, value,foi);
         }
       } catch (ServiceFailureException e) {
         System.out.println(("Datastream misurazione non presente!"));
@@ -660,69 +549,40 @@ public class ConnettoreDatasense {
   }
 
   private int parseBatteryVoltage(int[] buffer, int index) {
-    return parseLittleEndianUInt16(buffer, index);
+    return utility.parseLittleEndianUInt16(buffer, index);
   }
   private int parseAnalogIn(int[] buffer, int index) {
-    return parseLittleEndianUInt16(buffer, index);
+    return utility.parseLittleEndianUInt16(buffer, index);
   }
   private double parseInternalTemperature(int[] buffer, int index) {
-    double internal_temperature = (double)parseLittleEndianInt16(buffer, index) / 100;
+    double internal_temperature = (double)utility.parseLittleEndianInt16(buffer, index) / 100;
     return internal_temperature;
   }
   private double parseI2CTempProbe(int[] buffer, int index) {
-    double temp_probe = parseLittleEndianInt16(buffer, index) / 100;
+    double temp_probe = (double)utility.parseLittleEndianInt16(buffer, index) / 100;
     return temp_probe;
   }
   private double[] parseI2CTempRelativeHumidity(int[] buffer, int index) {
     double[] values = new double[2];
-    values[0] = parseLittleEndianInt16(buffer, index) / 100;
+    values[0] = (double)utility.parseLittleEndianInt16(buffer, index) / 100;
     values[1] = buffer[index + 2] / 2;
 
     return values;
   }
   private int parseBatteryEnergySincePower(int[] buffer, int index) {
-    int battery_energy_used = parseLittleEndianInt16(buffer, index);
+    int battery_energy_used = utility.parseLittleEndianInt16(buffer, index);
 
     return battery_energy_used;
   }
   private int parseEstimatedBatteryRemaining(int[] buffer, int index) {
-    int estimated_battery_remaining = parseLittleEndianInt16(buffer, index);
+    int estimated_battery_remaining = utility.parseLittleEndianInt16(buffer, index);
 
     return estimated_battery_remaining;
   }
 
   
 
-  long parseLittleEndianInt32(int[] buffer, int offset) {
-    long result = (buffer[offset + 3] << 24) + (buffer[offset + 2] << 16) + (buffer[offset + 1] << 8) + buffer[offset];
-
-    if ((result & 0x80000000) > 0)
-
-      result = result - 0x100000000L;
-
-    return result;
-  }
-  int parseLittleEndianInt24(int[] buffer, int offset) {
-    int result = (buffer[offset + 2] << 16) + (buffer[offset + 1] << 8) + buffer[offset];
-
-    if ((result & 0x800000) > 0)
-      result = result - 0x1000000;
-
-    return result;
-  }
-  int parseLittleEndianInt16(int[] buffer, int offset) {
-    int result = (buffer[offset + 1] << 8) + buffer[offset];
-
-    if ((result & 0x8000) > 0)
-      result = result - 0x10000;
-
-    return result;
-  }
-  int parseLittleEndianUInt16(int[] buffer, int offset) {
-    int result = (buffer[offset + 1] << 8) + buffer[offset];
-
-    return result;
-  }
+  
   ArrayList < Double > parseSDIMeasurement(int id, int[] buffer, int index) {
     int num_samples = buffer[index] & 0x0f;
     int data_type_id = buffer[index] >> 4;
@@ -778,7 +638,7 @@ public class ConnettoreDatasense {
     ArrayList < Double > data = new ArrayList < Double > ();
 
     for (int i = 0; i < num_samples; i++) {
-      data.add((double) parseLittleEndianInt16(buffer, index + i * 2 + 1) / 100);
+      data.add((double) utility.parseLittleEndianInt16(buffer, index + i * 2 + 1) / 100);
     }
 
     return data;
@@ -788,7 +648,7 @@ public class ConnettoreDatasense {
     ArrayList < Double > data = new ArrayList < Double > ();
 
     for (int i = 0; i < num_samples; i++) {
-      data.add((double) parseLittleEndianInt32(buffer, index + i * 4 + 1) / 1000);
+      data.add((double) utility.parseLittleEndianInt32(buffer, index + i * 4 + 1) / 1000);
     }
 
     return data;
@@ -814,21 +674,12 @@ public class ConnettoreDatasense {
 
     return data;
   }
-  int[] getHex(String value) {
-
-    int num_bytes = value.length() / 2;
-    int[] bytes = new int[num_bytes];
-
-    for (int i = 0; i < num_bytes; i++) {
-      bytes[i] = Integer.parseInt(value.substring(i * 2, i * 2 + 2), 16);
-    }
-    return bytes;
-  }
+  
   double[] parseGPSData(int[] buffer, int index) {
 
     double[] lat_lon = new double[2];
-    double latitude = 0.0000256 * parseLittleEndianInt24(buffer, index);
-    double longitude = 0.0000256 * parseLittleEndianInt24(buffer, index + 3);
+    lat_lon[0] = 0.0000256 * (double)utility.parseLittleEndianInt24(buffer, index); //latitudine
+    lat_lon[1] = 0.0000256 * (double)utility.parseLittleEndianInt24(buffer, index + 3);//longitudine
 
     return lat_lon;
   }

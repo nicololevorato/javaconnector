@@ -1,0 +1,2 @@
+-gestiuone sensori
+-tabella libelliumUM: ObservedPorperty derscription,ObservedPorperty definition,Datastream description,FeaureOfInterest Name,FeaureOfInterest Description
