@@ -1,15 +1,14 @@
 package com.tesilevorato.JavaMqttClient;
 
-import java.nio.charset.Charset;
 import java.sql.Connection;
 import java.sql.DriverManager;
 import java.sql.PreparedStatement;
 import java.sql.ResultSet;
 import java.sql.SQLException;
+import java.util.ArrayList;
 import java.util.Arrays;
 
 import com.google.gson.Gson;
-import com.tesilevorato.ConnettoreUtility;
 
 import org.json.JSONException;
 import org.json.JSONObject;
@@ -61,9 +60,9 @@ public class ConnettoreLibellium {
         String content=payloadjs.getString("payload");
         //nell'header in posizione del terzo byte è presente l'informazione sulla tipologia di frame
         int[] byteArrray=utility.getHex(content);
-        if (byteArrray.length > 2) {
+        if (byteArrray.length > 0) {
           //controllo primo bit
-          if ((byteArrray[3] & 0x10000000) == 0x10000000) {
+          if ((byteArrray[3] & 0x80000000) > 0 ) {
             StringBuilder output = new StringBuilder("");
             for (int i = 0; i < content.length(); i += 2) {
             String str = content.substring(i, i + 2);
@@ -75,13 +74,105 @@ public class ConnettoreLibellium {
           }
         }
     }
-        private void libelliumBINARY(int[] payload) {
+        private void libelliumBINARY(int[] buffer) throws ServiceFailureException, SQLException {
             // String serialIDs = payload.substring(10, 13);
             // int serialID = Integer.parseInt(serialIDs, 16);
             // String[] temp_fields = payload.split("(?<=\\G.{2})");
-        
+            int payload_length=buffer.length;
+            int iterated_message_length=5;
+            int serial_id=utility.parseLittleEndianInt16(buffer, iterated_message_length);
+            iterated_message_length+=4;
+            String sql_thing = "SELECT THINGID from libelliumID2THING WHERE SERIALID=" + serial_id;
+            PreparedStatement pstmt_thing = conn.prepareStatement(sql_thing);
+            ResultSet rs_thing = pstmt_thing.executeQuery();
+            int thingID = rs_thing.getInt("THINGID");
+            Thing temp_thing = service.things().find((long)thingID);
+            Sensor sensor=service.sensors().find(2L);
+            //#=35
+            while(buffer[iterated_message_length]!=35){//si cerca la fine della stringa segnata da #
+                iterated_message_length++;
+            }         
+            while(iterated_message_length<payload_length){
+                iterated_message_length++;//salto al byte successivo dove iniziano le misurazioni
+                int temp_msg_lenght = parseDataFieldLibelliumArray(buffer, iterated_message_length, temp_thing, sensor);
+                iterated_message_length+=temp_msg_lenght;
+            }
           }
-          //#region parser dataframe ASCII libellium
+          private int parseDataFieldLibelliumArray(int[] buffer, int iterated_message_length, Thing temp_thing,Sensor sensor) throws SQLException, ServiceFailureException {
+            int sensor_id_binary=buffer[iterated_message_length];
+            if(sensor_id_binary==53){//GPS
+                double lat=utility.parseLittleEndianFloat(buffer, iterated_message_length++);
+                iterated_message_length+=4;
+                double lon=utility.parseLittleEndianFloat(buffer, iterated_message_length++);
+                utility.CreateLocation(temp_thing, lat, lon);
+                return 9;
+            }
+            iterated_message_length++;//si passa ai valori
+            String sql_thing = "SELECT * from libelliumUM WHERE binary=" + sensor_id_binary;
+            PreparedStatement pstmt_UM = conn.prepareStatement(sql_thing);
+            ResultSet rs_UM = pstmt_UM.executeQuery();
+            String datastream_name=rs_UM.getString("sensor");
+            String type=rs_UM.getString("type");
+            Datastream datastream=temp_thing.datastreams().query().filter("name eq '"+datastream_name+"'").first();
+            if(datastream==null){
+                ObservedProperty obsPro=utility.CreateObservedProperty(datastream_name, rs_UM.getString("ObservedProperty definition"), rs_UM.getString("ObservedProperty Description"));
+                UnitOfMeasurement um=new UnitOfMeasurement(rs_UM.getString("unit"), rs_UM.getString("unit symbol"),rs_UM.getString("unit definition"));
+                String OMobs=OMfromType(type);
+                utility.CreateDatastream(temp_thing, datastream_name, rs_UM.getString("Datastream description"), um, OMobs, sensor, obsPro);
+            }
+            String featureGeo2 = "{'type':'Feature','geometry':{'type': 'Point','coordinates': [0,0]}}"; //FeatureBuilder.getInstance().toGeoJSON(feature);//"{\"type\":\"Feature\",\"geometry\":{\"type\": \"Point\",\"coordinates\": [-114.06,51.05]}}"
+            Gson gson2 = new Gson();
+            Object placeholder = gson2.fromJson(featureGeo2, Object.class);//dummy placeholder per le feature of interest
+            FeatureOfInterest foi=utility.CreateFeatureOfInterest(rs_UM.getString("FeaureOfInterest Name"), rs_UM.getString("FeaureOfInterest Description"), placeholder);           
+            int offset=0;           
+            //todo string
+            if(type=="string"){
+            ArrayList<Character> values=new ArrayList<Character>();
+            while(buffer[iterated_message_length+offset]!=53){
+                values.add(utility.parseChar(buffer, iterated_message_length+offset));
+                offset++;
+                }
+            StringBuilder builder = new StringBuilder(values.size());
+            for(Character ch: values)
+            {
+                builder.append(ch);
+            }
+            utility.CreateObservation(datastream, builder.toString(), foi);
+            }
+            ////////////////////////////////////////////////////////////
+            else{
+            ArrayList<Double> values=new ArrayList<Double>();
+            int fields=rs_UM.getInt("n fields");
+            for(int i=0;i<fields;i++){
+                switch (type) {
+                case "float":
+                    values.add((double)utility.parseLittleEndianFloat(buffer, iterated_message_length + (i*4)));
+                    offset+=4;
+                case "uint8_t":
+                    values.add((double)utility.parseLittleEndianUInt8(buffer, offset));
+                    offset++;
+                    
+                case "int":
+                    values.add((double)utility.parseLittleEndianInt16(buffer, offset));
+                    offset+=2;
+                    
+                case "ulong":
+                    values.add((double)utility.parseLittleEndianUInt32(buffer, offset));
+                    offset+=4;
+                default:
+                    
+            }
+        }
+        if(values.size()<2){
+            utility.CreateObservation(datastream, values.toArray()[0], foi);
+        }else{
+            utility.CreateObservation(datastream, values.toString(), foi);
+        }
+        }
+        
+        return offset;
+        }
+        //#region parser dataframe ASCII libellium
           private void libelliumASCII(String payload) throws SQLException, ServiceFailureException {
             String[] temp_fields = payload.split("#");
             int serial_id = Integer.parseInt(temp_fields[1]);
@@ -107,34 +198,14 @@ public class ConnettoreLibellium {
                 PreparedStatement pstmt_um = conn.prepareStatement(sql_um);
                 ResultSet rs_um = pstmt_um.executeQuery();
                 String sensor_tag = rs_um.getString("sensor tag");
-                String dataName = rs_um.getString("sensor");
-                Datastream datastream=service.datastreams().query().filter("name eq '"+sensor+"'").first();
+                String datastream_name = rs_um.getString("sensor");
+                Datastream datastream=service.datastreams().query().filter("name eq '"+datastream_name+"'").first();
                 if(datastream==null){
                     ObservedProperty obsPro=utility.CreateObservedProperty(sensor_tag, rs_um.getString("ObservedPorperty Definition"), rs_um.getString("ObservedPorperty Description"));
                     UnitOfMeasurement um=new UnitOfMeasurement(rs_um.getString("unit"), rs_um.getString("unit symbol"), rs_um.getString("unit definition"));
-                    String obsType=rs_um.getString("Datastream Description");
-                    String OMtype;
-                    switch (obsType) {
-                        case "float":
-                            OMtype="OM_Measurement";
-                            break;
-                        case "uint8_t":
-                            OMtype="OM_CountObservation";
-                            break;
-                        case "int":
-                            OMtype="OM_CountObservation";
-                            break;
-                        case "string":
-                            OMtype="OM_Observation";
-                            break;
-                        case "ulong":
-                            OMtype="OM_Measurement";
-                            break;
-                        default:
-                            OMtype="OM_Observation";
-                            break;
-                    }
-                    datastream=utility.CreateDatastream(temp_thing, dataName, rs_um.getString("Datastream Description"), um,OMtype, sensor, obsPro);
+                    String obsType=rs_um.getString("type");
+                    String OMtype=OMfromType(obsType);
+                    datastream=utility.CreateDatastream(temp_thing, datastream_name, rs_um.getString("Datastream Description"), um,OMtype, sensor, obsPro);
                 }
                 FeatureOfInterest foi=utility.CreateFeatureOfInterest(rs_um.getString("FeaureOfInterest Name"), rs_um.getString("FeaureOfInterest Description"), placeholder);
                 String[] tempValue = splitted_field[1].split(";");
@@ -164,5 +235,21 @@ public class ConnettoreLibellium {
             }
         
           }
+          private static String OMfromType(String obsType){
+            switch (obsType) {
+                case "float":
+                    return "OM_Measurement";
+                case "uint8_t":
+                    return "OM_CountObservation";
+                case "int":
+                    return "OM_CountObservation";
+                case "string":
+                    return "OM_Observation";
+                case "ulong":
+                    return "OM_Measurement";
+                default:
+                    return "OM_Observation";
+          }
       }
+    }
 

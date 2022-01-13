@@ -7,7 +7,7 @@ import java.sql.ResultSet;
 import java.sql.SQLException;
 import java.util.ArrayList;
 import com.google.gson.Gson;
-import com.tesilevorato.ConnettoreUtility;
+
 import org.json.JSONException;
 import org.json.JSONObject;
 import de.fraunhofer.iosb.ilt.sta.ServiceFailureException;

@@ -1,4 +1,4 @@
-package com.tesilevorato;
+package com.tesilevorato.JavaMqttClient;
 
 import java.net.MalformedURLException;
 import java.net.URL;
@@ -129,7 +129,7 @@ public class ConnettoreUtility {
         return foi;
         }
         public long parseLittleEndianInt32(int[] buffer, int offset) {
-            long result = (buffer[offset + 3] << 24) + (buffer[offset + 2] << 16) + (buffer[offset + 1] << 8) + buffer[offset];
+            long result = (long)parseLittleEndianUInt32(buffer, offset);
         
             if ((result & 0x80000000) > 0)
         
@@ -168,5 +168,19 @@ public class ConnettoreUtility {
             }
             return bytes;
           }
-    
+          public int parseLittleEndianUInt32(int[] buffer, int offset) {
+            int result = (buffer[offset + 3] << 24) + (buffer[offset + 2] << 16) + (buffer[offset + 1] << 8) + buffer[offset];
+        
+            return result;
+          }
+          public float parseLittleEndianFloat(int[] buffer, int offset){
+            int result = parseLittleEndianUInt32(buffer, offset);
+            return Float.intBitsToFloat(result);
+          }
+          public int parseLittleEndianUInt8(int[] buffer, int offset){
+            return buffer[offset];
+          }
+          public char parseChar(int[] buffer, int offset){
+              return (char) buffer[offset];     
+          }
 }
